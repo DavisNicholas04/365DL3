@@ -42,7 +42,7 @@ public class app2 extends JFrame {
         }
         else {
             System.out.println("\u001B[35m Reading file");
-            businessTree = PersistData.bytesToObject(System.getProperty("user.dir") + bTreeFileLocation);
+            businessTree = PersistData.bytesToBtree(System.getProperty("user.dir") + bTreeFileLocation);
             businessNames = PersistData.bytesToList(System.getProperty("user.dir") + businessNamesFileLocation);
         }
         fillJComboBoxModel();

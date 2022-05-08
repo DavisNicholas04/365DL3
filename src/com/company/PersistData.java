@@ -45,7 +45,7 @@ public class PersistData {
         return map;
     }
 
-    public static MyBTree bytesToObject(String location) throws IOException, ClassNotFoundException {
+    public static MyBTree bytesToBtree(String location) throws IOException, ClassNotFoundException {
         FileInputStream fis = new FileInputStream(location);
         ObjectInputStream ois = new ObjectInputStream(fis);
         MyBTree myBTree = (MyBTree) ois.readObject();
