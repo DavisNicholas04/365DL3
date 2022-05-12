@@ -69,7 +69,7 @@ public class app2 extends JFrame {
 
     public void fillJComboBoxModel() throws IOException, ClassNotFoundException {
 
-        Map<String, ArrayList<String>> clusters = KMeans.fit(businessTree,5,1, businessNames);
+        Map<String, ArrayList<String>> clusters =  new KMeans(businessTree).fit(5,1, businessNames);
 
         int i = 0;
         for(Map.Entry<String, ArrayList<String>> entry: clusters.entrySet()){
