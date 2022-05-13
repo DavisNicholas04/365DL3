@@ -38,7 +38,7 @@ public class PersistData {
         }
     }
 
-    public static Map<Integer, ArrayList<String>> bytesToMaps(String location) throws IOException, ClassNotFoundException {
+    public static Map bytesToMaps(String location) throws IOException, ClassNotFoundException {
         FileInputStream fis = new FileInputStream(location);
         ObjectInputStream ois = new ObjectInputStream(fis);
         Map map = (Map) ois.readObject();

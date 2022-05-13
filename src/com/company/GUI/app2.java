@@ -7,31 +7,40 @@ import com.company.dataStructures.bTree.MyBTree;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.*;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.Scanner;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.*;
 
-public class app2 extends JFrame {
+public class app2 extends JFrame implements ActionListener {
     JFrame jFrame = this;
     JPanel panelMain;
     int bTreeOrder = 36;
     MyBTree businessTree;
     ArrayList<String> businessNames = new ArrayList<>();
+    LinkedList<MyHashMap> shortestPath;
 
     //File location variables
     final private String jsonFileLocation = "/1k_business_dataset.txt";
     final private String cleanedFileLocation = "/1k_business_dataset(cleaned).txt";
     final private String bTreeFileLocation = "/yelpBtree.dat";
     final private String businessNamesFileLocation = "/businessNames.dat";
+    final private String clusterFileLocation = "/clusters.dat";
     private JComboBox<String> comboBox1;
     private JComboBox<String> comboBox2;
     private JComboBox<String> comboBox3;
     private JComboBox<String> comboBox4;
     private JComboBox<String> comboBox5;
+    JPanel[] panels;
+    JLabel[] labels;
     private JComboBox[] comboBoxes = {comboBox1, comboBox2, comboBox3, comboBox4, comboBox5};
-
+    private JButton[] submit = new JButton[5];
     final private DefaultComboBoxModel[] comboBoxModels = new DefaultComboBoxModel[5];
+    String chosenNode;
+    String[] centroids;
 
     public app2() throws IOException, ClassNotFoundException {
         super("K-Means");
@@ -52,8 +61,12 @@ public class app2 extends JFrame {
     public void setUpPage(){
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         this.setLayout(new FlowLayout());
-
         for(int i = 0; i < comboBoxes.length; i++) {
+            submit[i] = new JButton();
+            submit[i].setText("Submit");
+            submit[i].addActionListener(e -> {});
+            submit[i].addActionListener(this);
+            this.add(submit[i]);
             comboBoxes[i].setPreferredSize(new Dimension(250, 28));
             comboBoxes[i].setFont(new Font("Consolas", Font.PLAIN, 18));
             comboBoxes[i].setForeground(Color.blue);
@@ -68,15 +81,23 @@ public class app2 extends JFrame {
     }
 
     public void fillJComboBoxModel() throws IOException, ClassNotFoundException {
-
-        Map<String, ArrayList<String>> clusters =  new KMeans(businessTree).fit(5,1, businessNames);
-
+        Map<String, ArrayList<String>> clusters = new HashMap<>();
+        if (!new File(System.getProperty("user.dir") + clusterFileLocation).exists() || !new File(System.getProperty("user.dir") + clusterFileLocation).exists()) {
+            clusters = new KMeans(businessTree).fit(5, 1, businessNames);
+        }
+        else {
+            clusters = PersistData.bytesToMaps(System.getProperty("user.dir") + clusterFileLocation);
+            businessTree = PersistData.bytesToBtree(System.getProperty("user.dir") + bTreeFileLocation);
+        }
         int i = 0;
+        centroids = new String[clusters.size()];
         for(Map.Entry<String, ArrayList<String>> entry: clusters.entrySet()){
+            centroids[i] = entry.getKey();
             comboBoxModels[i] = new DefaultComboBoxModel<>();
             comboBoxModels[i].addAll(entry.getValue());
             comboBoxes[i].setModel(comboBoxModels[i]);
             comboBoxes[i].setMaximumRowCount(5);
+            comboBoxes[i].setToolTipText(entry.getKey());
             i++;
         }
 
@@ -212,5 +233,129 @@ public class app2 extends JFrame {
         }
     }
 
+    @Override
+    public void actionPerformed(ActionEvent actionEvent) {
+        for (int i = 0; i < submit.length; i++) {
+            if (actionEvent.getSource() == submit[i]) {
+                chosenNode = Objects.requireNonNull(comboBoxes[i].getSelectedItem()).toString();
+//                ArrayList<String> connectedCentroids = new ArrayList<>();
+                try {
+//                    connectedCentroids = connectedCentroids(chosenNode);
+                    businessTree = calculateShortestPathFromSource(businessTree, businessTree.search(chosenNode));
+                    shortestPath = businessTree.search(chosenNode).getShortestPath();
+                    labels = new JLabel[shortestPath.size()];
+                    panels = new JPanel[shortestPath.size()];
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                createLabels();
+                createPanels();
+                populateLabels();
+                populatePanels();
+                this.setSize(500, 500);
+                break;
+            }
+        }
+    }
+
+    public static MyBTree calculateShortestPathFromSource(MyBTree graph, MyHashMap source) {
+        source.setDistance(0);
+
+        Set<MyHashMap> settledNodes = new HashSet<>();
+        Set<MyHashMap> unsettledNodes = new HashSet<>();
+        unsettledNodes.add(source);
+
+        while (unsettledNodes.size() != 0) {
+            MyHashMap currentNode = getLowestDistanceNode(unsettledNodes);
+            unsettledNodes.remove(currentNode);
+            for (MyHashMap adjacencyPair: currentNode.getNeighbors()) {
+                MyHashMap adjacentNode = adjacencyPair;
+                Double edgeWeight = adjacencyPair.getTFIDF();
+                if (!settledNodes.contains(adjacentNode)) {
+                    calculateMinimumDistance(adjacentNode, edgeWeight, currentNode);
+                    unsettledNodes.add(adjacentNode);
+                }
+            }
+            settledNodes.add(currentNode);
+        }
+        return graph;
+    }
+
+    private static MyHashMap getLowestDistanceNode(Set < MyHashMap > unsettledNodes) {
+        MyHashMap lowestDistanceNode = null;
+        double lowestDistance = Integer.MAX_VALUE;
+        for (MyHashMap node: unsettledNodes) {
+            double nodeDistance = node.getDistance();
+            if (nodeDistance < lowestDistance) {
+                lowestDistance = nodeDistance;
+                lowestDistanceNode = node;
+            }
+        }
+        return lowestDistanceNode;
+    }
+    private static void calculateMinimumDistance(MyHashMap evaluationNode, Double edgeWeight, MyHashMap sourceNode) {
+        double sourceDistance = sourceNode.getDistance();
+        if (sourceDistance + edgeWeight < evaluationNode.getDistance()) {
+            evaluationNode.setDistance(sourceDistance + edgeWeight);
+            LinkedList<MyHashMap> shortestPath = new LinkedList<>(sourceNode.getShortestPath());
+            shortestPath.add(sourceNode);
+            evaluationNode.setShortestPath(shortestPath);
+        }
+    }
+
+    private ArrayList<String> connectedCentroids(String chosenNode) throws IOException {
+        ArrayList<String> connected = new ArrayList<>();
+        for (String centroid : centroids) {
+            int centroidSet = businessTree.search(centroid).getDisjointSet();
+            int chosenSet = businessTree.search(chosenNode).getDisjointSet();
+            if (centroidSet == chosenSet)
+                connected.add(centroid);
+        }
+        return connected;
+    }
+
+    private void createLabels(){
+
+        for(int i = 0; i < labels.length; i++) {
+            if (labels[i] != null)
+                continue;
+            labels[i] = new JLabel();
+        }
+    }
+
+    private void createPanels() {
+        panels = new JPanel[shortestPath.size()];
+        int height = 25;
+        int width = 500;
+        for (int i = 0; i < panels.length; i++) {
+            panels[i] = new JPanel() {
+                @Override
+                public Dimension getPreferredSize() {
+                    return new Dimension(width, height);
+                }
+            };
+            panels[i].setBounds(0, height * i, width, height);
+        }
+    }
+
+    //add text to the label
+    private void populateLabels(){
+        for(int i = 0; i < labels.length; i++) {
+            labels[i].setText(shortestPath.get(i).getBusinessName());
+        }
+    }
+
+    //add labels to the panels
+    private void populatePanels(){
+        int rgb = 200;
+        for (int i = 0; i < panels.length; i++) {
+            panels[i].setBackground(new Color(rgb, rgb, rgb));
+            panels[i].add(labels[i]);
+            labels[i].setVerticalAlignment(JLabel.CENTER);
+            jFrame.add(panels[i]);
+        }
+        jFrame.pack();
+    }
 
 }

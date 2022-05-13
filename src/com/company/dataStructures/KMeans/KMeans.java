@@ -10,7 +10,6 @@ import org.codehaus.plexus.util.FileUtils;
 import org.sonatype.inject.Nullable;
 
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static java.util.stream.Collectors.toList;
@@ -18,6 +17,9 @@ import static java.util.stream.Collectors.toList;
 public class KMeans {
     static final File disjointSetsFile = new File(System.getProperty("user.dir") + "/disjointSets");
     static final String disjointSetFileLocation = System.getProperty("user.dir") + "/disjointSet.dat";
+    static Map<Integer, ArrayList<String>> disjointSets = new HashMap<>();
+    final private String clusterFileLocation = "/clusters.dat";
+
     final MyBTree records;
 
     public KMeans(MyBTree records){
@@ -52,6 +54,9 @@ public class KMeans {
                     };
                     currentBusiness.setNeighbors(nearestNeighbors);
                 }
+                if (isLastIteration)
+                    setDistanceForNeighbors(currentBusiness);
+
                 System.out.println("CURRENT BUSINESS: " + currentBusiness.getBusinessName() + "\n" +
                                    "Nearest Neighbors: " + currentBusiness.getNeighbors()[0].getBusinessName() + " ||| "
                                                          + currentBusiness.getNeighbors()[1].getBusinessName() + " ||| "
@@ -105,7 +110,6 @@ public class KMeans {
             clusters = new HashMap<>();
         }
 
-
         Map<String, ArrayList<String>> finalClusters = new HashMap<>();
         ArrayList<String> value;
         String key;
@@ -119,6 +123,7 @@ public class KMeans {
         if (disjointSetsFile.listFiles().length == 0)
             makeDisjointSets(businessNames);
 
+        PersistData.mapToBytes(disjointSets, disjointSetFileLocation);
         PersistData.BtreeToBytes(records, System.getProperty("user.dir") + "/yelpBtree.dat" );
 
 //        if (!new File(disjointSetFileLocation).exists()) {
@@ -150,27 +155,96 @@ public class KMeans {
 //            PersistData.listToBytes(new ArrayList(), disjointSetFileLocation);
 //            PersistData.objectToBytes(records, System.getProperty("user.dir") + "/yelpBtree.dat" );
 //        }
+        PersistData.mapToBytes(finalClusters, System.getProperty("user.dir") + clusterFileLocation);
         return finalClusters;
     }
 
     private void makeDisjointSets(List<String> businessNames) throws IOException {
         for (int i = 0; i < records.getSize(); i++){
+
+            ArrayList<String> targetSet = new ArrayList<>();
+            ArrayList<String> destinationSet = new ArrayList<>();
+            ArrayList<String> newGroup = new ArrayList<>();
             MyHashMap currentBusiness = records.search(businessNames.get(i));
-            assignSet(currentBusiness, i);
+            if (currentBusiness.unassignedDisjointSet()){
+
+                //NEIGHBOR CHECK: check if neighbors are assigned to a group
+                //if so, assign current business with the smallest group number
+                int smallestGroupNum = Integer.MAX_VALUE;
+                for (MyHashMap neighbor : Arrays.asList(currentBusiness.getNeighbors())) {
+                    if(!neighbor.unassignedDisjointSet() && neighbor.getDisjointSet() <= smallestGroupNum){
+                        smallestGroupNum = neighbor.getDisjointSet();
+                        currentBusiness.setDisjointSet(smallestGroupNum);
+                    }
+                }
+                //check if currentBusiness got assigned a group during NEIGHBOR CHECK.
+                //if so; adds it, all neighbors, and all business in the same group as the neighbors to the newly assigned group.
+                //removes reference to old group neighbors were in.
+                if (!currentBusiness.unassignedDisjointSet()){
+                    for (MyHashMap neighbor : currentBusiness.getNeighbors()) {
+                        if (!neighbor.unassignedDisjointSet() && neighbor.getDisjointSet() != currentBusiness.getDisjointSet()) {
+                            targetSet = disjointSets.get(neighbor.getDisjointSet());
+                            destinationSet = disjointSets.get(currentBusiness.getDisjointSet());
+                            disjointSets.remove(neighbor.getDisjointSet());
+
+                            for (String s : targetSet) {
+                                records.search(s).setDisjointSet(currentBusiness.getDisjointSet());
+                            }
+                            destinationSet.addAll(targetSet);
+                            disjointSets.put(currentBusiness.getDisjointSet(), destinationSet);
+                        } else if (neighbor.unassignedDisjointSet()) {
+                            targetSet = new ArrayList<>();
+                            destinationSet = disjointSets.get(currentBusiness.getDisjointSet());
+                            targetSet.add(neighbor.getBusinessName());
+                            destinationSet.addAll(targetSet);
+                            disjointSets.put(currentBusiness.getDisjointSet(), destinationSet);
+                        }
+                    }
+                    destinationSet = disjointSets.get(currentBusiness.getDisjointSet());
+                    destinationSet.add(currentBusiness.getBusinessName());
+                    disjointSets.put(currentBusiness.getDisjointSet(), destinationSet);
+                }
+                else{
+                    currentBusiness.setDisjointSet(i);
+                    newGroup.add(currentBusiness.getBusinessName());
+                    for (MyHashMap neighbor : currentBusiness.getNeighbors()) {
+                        neighbor.setDisjointSet(i);
+                        newGroup.add(neighbor.getBusinessName());
+                    }
+                    disjointSets.put(i, newGroup);
+                }
+            }
+            else{
+                for (MyHashMap neighbor : currentBusiness.getNeighbors()) {
+
+                    if (!neighbor.unassignedDisjointSet()){
+                        if(currentBusiness.getDisjointSet() < neighbor.getDisjointSet())
+                            moveDisjointSets(currentBusiness, neighbor);
+
+                        else if (currentBusiness.getDisjointSet() > neighbor.getDisjointSet())
+                            moveDisjointSets(neighbor, currentBusiness);
+                    }
+                    else {
+                        neighbor.setDisjointSet(currentBusiness.getDisjointSet());
+                        destinationSet = disjointSets.get(currentBusiness.getDisjointSet());
+                        destinationSet.add(neighbor.getBusinessName());
+                        disjointSets.put(currentBusiness.getDisjointSet(), destinationSet);
+                    }
+                }
+            }
         }
     }
 
     private void assignSet(MyHashMap currentBusiness, int iteration) throws IOException {
+        ArrayList<String> targetSet = new ArrayList<>();
+        ArrayList<String> destinationSet = new ArrayList<>();
+        ArrayList<String> newGroup = new ArrayList<>();
+
         if (currentBusiness.unassignedDisjointSet())
             currentBusiness.setDisjointSet(iteration);
+        destinationSet.add(currentBusiness.getBusinessName());
+        disjointSets.put(currentBusiness.getDisjointSet(), destinationSet);
 
-        if (currentBusiness.getDisjointSet() == 39){
-            System.out.println();
-        }
-        File file2 = new File(System.getProperty("user.dir") +"/disjointSets/set_"+ currentBusiness.getDisjointSet() + ".txt");
-        OutputStream outputStream = new FileOutputStream(file2, true);
-        outputStream.write((currentBusiness.getBusinessName() + "---").getBytes(StandardCharsets.UTF_8));
-        outputStream.close();
         for (MyHashMap neighbor : currentBusiness.getNeighbors()) {
             if (neighbor.getDisjointSet() != currentBusiness.getDisjointSet() && !neighbor.unassignedDisjointSet()){
                 moveDisjointSets(currentBusiness, neighbor);
@@ -179,50 +253,24 @@ public class KMeans {
 //                System.out.println();
             else if (neighbor.unassignedDisjointSet()){
                 neighbor.setDisjointSet(currentBusiness.getDisjointSet());
-                outputStream = new FileOutputStream(file2, true);
-                outputStream.write((neighbor.getBusinessName() + "---").getBytes(StandardCharsets.UTF_8));
-                closeStreams(outputStream, null, null);
-                if (!file2.exists())
-                    System.out.println(file2 + " does not exist--------------------------------------------------------------------------------------------------");
-                else if (file2.exists() && file2.toString().equals("C:\\Users\\davis\\iCloudDrive\\School\\2022 spring\\365\\Assignment3\\disjointSets\\set_39.txt"))
-                    System.out.println();
+                destinationSet = disjointSets.get(currentBusiness.getDisjointSet());
+                destinationSet.add(neighbor.getBusinessName());
+                disjointSets.put(currentBusiness.getDisjointSet(), destinationSet);
             }
         }
     }
 
     private void moveDisjointSets(MyHashMap destination, MyHashMap target) throws IOException {
-        System.out.println("-------MOVING SETS START---------------------------------------------------------------------------------");
-        File targetFile = new File(System.getProperty("user.dir") +"/disjointSets/set_"+ target.getDisjointSet() + ".txt");
-        File destinationFile = new File(System.getProperty("user.dir") +"/disjointSets/set_"+ destination.getDisjointSet() + ".txt");
-        System.out.printf("TARGET BUSINESS/FILE: %s (%d) ||| %s\n", target.getBusinessName(), target.getDisjointSet(), targetFile);
-        System.out.printf("DESTINATION BUSINESS/FILE: %s (%d) ||| %s\n-\n-\n", destination.getBusinessName(), destination.getDisjointSet(), destinationFile);
-        if (destination.getDisjointSet() == 39){
-            System.out.println();
+        ArrayList<String> targetSet;
+        ArrayList<String> destinationSet;
+        targetSet = disjointSets.get(target.getDisjointSet());
+        destinationSet = disjointSets.get(destination.getDisjointSet());
+        disjointSets.remove(target.getDisjointSet());
+        for (String s : targetSet) {
+            records.search(s).setDisjointSet(destination.getDisjointSet());
         }
-        OutputStream destinationStream = new FileOutputStream(destinationFile, true);
-        InputStream targetStream = new FileInputStream(targetFile);
-        StringBuilder targetString = new StringBuilder();
-        Scanner targets = new Scanner(targetStream);
-        while(targets.hasNextLine())
-            targetString.append(targets.nextLine());
-
-        String[] allTargets = targetString.toString().split("---");
-        for (String next: allTargets) {
-            if (next.equals("Dangelo Sandwich Shop"))
-                System.out.println();
-            MyHashMap business = records.search(next);
-            System.out.printf("BEFORE CHANGE\nBUSINESS: %s || CURRENT SET: %d\n\n", business.getBusinessName(), business.getDisjointSet());
-            business.setDisjointSet(destination.getDisjointSet());
-            System.out.printf("AFTER CHANGE\nBUSINESS: %s || CURRENT SET: %d\n\n", records.search(next).getBusinessName(), records.search(next).getDisjointSet());
-        }
-
-        destinationStream.write(targetStream.readAllBytes());
-        closeStreams(destinationStream,targets,targetStream);
-        if (!targetFile.delete())
-            System.out.printf("-------------------------%s NOT DELETED------------------------------\n", targetFile);
-        else
-            System.out.printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^%s deleted^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n", targetFile);
-        System.out.println("-------MOVING SETS FINISH--------------------------------------------------------------------------------");
+        destinationSet.addAll(targetSet);
+        disjointSets.put(destination.getDisjointSet(), destinationSet);
     }
 
     private static boolean doesntEqualNeighbors(ArrayList<Integer> neighbors, int currentGroup){
@@ -434,6 +482,36 @@ public class KMeans {
         double rad = 6371;
         double c = 2 * Math.asin(Math.sqrt(a));
         return rad * c;
+    }
+
+    private void setDistanceForNeighbors(MyHashMap business){
+        MyHashMap[] neighbors = business.getNeighbors();
+        for(MyHashMap maps: neighbors) {
+            maps.setTfidf(0);
+            //Layer 2
+            for (LinkedList<Term> ll : business.map) {
+                if (ll == null)
+                    continue;
+                for (Term key : ll) {
+                    maps.addToTfidf(TFIDF_Asgnt1.CalculateTFIDF(allToOneHashmap(neighbors), maps, key.key, 4));
+                }
+            }
+        }
+    }
+    public MyHashMap allToOneHashmap(MyHashMap[] myHashMaps){
+        MyHashMap combinedMap = new MyHashMap();
+        //Layer 1
+        for(MyHashMap maps: myHashMaps) {
+            //Layer 2
+            for (LinkedList<Term> ll : maps.map) {
+                if (ll == null)
+                    continue;
+                for (Term key : ll) {
+                    combinedMap.put(key.key);
+                }
+            }
+        }
+        return combinedMap;
     }
 
 }

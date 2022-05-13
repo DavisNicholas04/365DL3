@@ -8,6 +8,7 @@ import java.util.LinkedList;
 public class MyHashMap implements Serializable {
 
     public LinkedList<Term>[] map = new LinkedList[100];
+    LinkedList<MyHashMap> shortestPath = new LinkedList<>();
     public int size = 0;
     double tfidf = 0;
     String businessName;
@@ -15,6 +16,16 @@ public class MyHashMap implements Serializable {
     double longitude;
     MyHashMap[] neighbors = new MyHashMap[4];
     int disjointSet = -1;
+    double distance = Integer.MAX_VALUE;
+
+    public double getDistance() {
+        return distance;
+    }
+
+    public void setDistance(double distance) {
+        this.distance = distance;
+    }
+
 
     public boolean unassignedDisjointSet(){
         return disjointSet == -1;
@@ -136,5 +147,13 @@ public class MyHashMap implements Serializable {
             }
         }
         return null;
+    }
+
+    public LinkedList<MyHashMap> getShortestPath() {
+        return shortestPath;
+    }
+
+    public void setShortestPath(LinkedList<MyHashMap> shortestPath) {
+        this.shortestPath = shortestPath;
     }
 }
