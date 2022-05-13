@@ -29,16 +29,11 @@ public class app2 extends JFrame implements ActionListener {
     final private String bTreeFileLocation = "/yelpBtree.dat";
     final private String businessNamesFileLocation = "/businessNames.dat";
     final private String clusterFileLocation = "/clusters.dat";
-    private JComboBox<String> comboBox1;
-    private JComboBox<String> comboBox2;
-    private JComboBox<String> comboBox3;
-    private JComboBox<String> comboBox4;
-    private JComboBox<String> comboBox5;
+    private JComboBox<String> comboBox;
+    private JButton submit;
     JPanel[] panels;
     JLabel[] labels;
-    private JComboBox[] comboBoxes = {comboBox1, comboBox2, comboBox3, comboBox4, comboBox5};
-    private JButton[] submit = new JButton[5];
-    final private DefaultComboBoxModel[] comboBoxModels = new DefaultComboBoxModel[5];
+    final private DefaultComboBoxModel<String> comboBoxModel = new DefaultComboBoxModel<>();
     String chosenNode;
     String[] centroids;
 
@@ -61,22 +56,21 @@ public class app2 extends JFrame implements ActionListener {
     public void setUpPage(){
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         this.setLayout(new FlowLayout());
-        for(int i = 0; i < comboBoxes.length; i++) {
-            submit[i] = new JButton();
-            submit[i].setText("Submit");
-            submit[i].addActionListener(e -> {});
-            submit[i].addActionListener(this);
-            this.add(submit[i]);
-            comboBoxes[i].setPreferredSize(new Dimension(250, 28));
-            comboBoxes[i].setFont(new Font("Consolas", Font.PLAIN, 18));
-            comboBoxes[i].setForeground(Color.blue);
-            comboBoxes[i].setBackground(Color.white);
-            comboBoxes[i].setToolTipText("Cluster " + i);//setText("Choose a business");
-            this.add(comboBoxes[i]);
-        }
+        labels = new JLabel[businessNames.size()];
+        submit.setText("Submit");
+        submit.addActionListener(e -> {});
+        submit.addActionListener(this);
+        this.add(submit);
+        comboBox.setPreferredSize(new Dimension(500, 28));
+        comboBox.setFont(new Font("Consolas", Font.PLAIN, 18));
+        comboBox.setForeground(Color.blue);
+        comboBox.setBackground(Color.white);
+        comboBox.setToolTipText("businesses");//setText("Choose a business");
+        this.add(comboBox);
+
 
         this.pack();
-        this.setSize(500,500);
+        this.setSize(800,800);
         this.setVisible(true);
     }
 
@@ -93,14 +87,11 @@ public class app2 extends JFrame implements ActionListener {
         centroids = new String[clusters.size()];
         for(Map.Entry<String, ArrayList<String>> entry: clusters.entrySet()){
             centroids[i] = entry.getKey();
-            comboBoxModels[i] = new DefaultComboBoxModel<>();
-            comboBoxModels[i].addAll(entry.getValue());
-            comboBoxes[i].setModel(comboBoxModels[i]);
-            comboBoxes[i].setMaximumRowCount(5);
-            comboBoxes[i].setToolTipText(entry.getKey());
+            comboBoxModel.addAll(entry.getValue());
             i++;
         }
-
+        comboBox.setModel(comboBoxModel);
+        comboBox.setMaximumRowCount(5);
     }
 
     @Deprecated
@@ -235,9 +226,8 @@ public class app2 extends JFrame implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent actionEvent) {
-        for (int i = 0; i < submit.length; i++) {
-            if (actionEvent.getSource() == submit[i]) {
-                chosenNode = Objects.requireNonNull(comboBoxes[i].getSelectedItem()).toString();
+            if (actionEvent.getSource() == submit) {
+                chosenNode = Objects.requireNonNull(comboBox.getSelectedItem()).toString();
 //                ArrayList<String> connectedCentroids = new ArrayList<>();
                 try {
 //                    connectedCentroids = connectedCentroids(chosenNode);
@@ -254,16 +244,39 @@ public class app2 extends JFrame implements ActionListener {
                 populateLabels();
                 populatePanels();
                 this.setSize(500, 500);
-                break;
-            }
+
         }
     }
+
+//    public static MyBTree calculateShortestPathFromSource(MyBTree graph, MyHashMap source) {
+//        source.setDistance(0);
+//
+//        Set<MyHashMap> settledNodes = new HashSet<>();
+//        Set<MyHashMap> unsettledNodes = new HashSet<>();
+//        unsettledNodes.add(source);
+//
+//        while (unsettledNodes.size() != 0) {
+//            MyHashMap currentNode = getLowestDistanceNode(unsettledNodes);
+//            unsettledNodes.remove(currentNode);
+//            for (MyHashMap adjacencyPair: currentNode.getNeighbors()) {
+//                MyHashMap adjacentNode = adjacencyPair;
+//                Double edgeWeight = adjacencyPair.getTFIDF();
+//                if (!settledNodes.contains(adjacentNode)) {
+//                    calculateMinimumDistance(adjacentNode, edgeWeight, currentNode);
+//                    unsettledNodes.add(adjacentNode);
+//                }
+//            }
+//            settledNodes.add(currentNode);
+//        }
+//        return graph;
+//    }
 
     public static MyBTree calculateShortestPathFromSource(MyBTree graph, MyHashMap source) {
         source.setDistance(0);
 
         Set<MyHashMap> settledNodes = new HashSet<>();
         Set<MyHashMap> unsettledNodes = new HashSet<>();
+
         unsettledNodes.add(source);
 
         while (unsettledNodes.size() != 0) {
@@ -316,16 +329,18 @@ public class app2 extends JFrame implements ActionListener {
     }
 
     private void createLabels(){
-
         for(int i = 0; i < labels.length; i++) {
-            if (labels[i] != null)
-                continue;
             labels[i] = new JLabel();
         }
     }
-
+    //add text to the label
+    private void populateLabels(){
+        for(int i = 0; i < labels.length; i++) {
+            labels[i].setText(businessNames.get(i));
+        }
+    }
     private void createPanels() {
-        panels = new JPanel[shortestPath.size()];
+        panels = new JPanel[businessNames.size()];
         int height = 25;
         int width = 500;
         for (int i = 0; i < panels.length; i++) {
@@ -338,14 +353,6 @@ public class app2 extends JFrame implements ActionListener {
             panels[i].setBounds(0, height * i, width, height);
         }
     }
-
-    //add text to the label
-    private void populateLabels(){
-        for(int i = 0; i < labels.length; i++) {
-            labels[i].setText(shortestPath.get(i).getBusinessName());
-        }
-    }
-
     //add labels to the panels
     private void populatePanels(){
         int rgb = 200;
@@ -357,5 +364,4 @@ public class app2 extends JFrame implements ActionListener {
         }
         jFrame.pack();
     }
-
 }
